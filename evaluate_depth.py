@@ -236,7 +236,6 @@ def evaluate(opt):
 
     pred_disps_z = []
     pred_disps_mono = []
-    pred_disps_fuse = []
 
     print("-> Computing predictions with size {}x{}".format(HEIGHT, WIDTH))
     # do inference
@@ -335,33 +334,19 @@ def evaluate(opt):
             # mvs fuse mask
             cost_prob_entropy = entropy(cost_prob_z, dim=1, keepdim=True)  # B 1 H W
 
-            trust_mono_mask = mask_cnn(cost_prob_entropy)  # B 1 H W
-            # print("trust_mono_mask", trust_mono_mask.shape)
-            trust_mono_mask = F.interpolate(trust_mono_mask, [opt.height, opt.width], mode="bilinear",
-                                            align_corners=True)
-            # print("trust_mono_mask1", trust_mono_mask.shape)
-            fused_depth = (1 - trust_mono_mask) * depth_mvs_z[:,
-                                                  None].detach() + trust_mono_mask * pred_mono_depth.detach()
-            # fused_depth = trust_mono_mask * depth_mvs_z[:,None].detach() + (1-trust_mono_mask) * pred_mono_depth.detach()
-            # fused_depth = (1-trust_mono_mask) * depth_mvs_z[:,None] + trust_mono_mask * pred_mono_depth
-            pred_disps_fuse.append(1 / fused_depth.cpu().numpy())
+
 
         pred_disps_z = np.concatenate(pred_disps_z)
         pred_disps_mono = np.concatenate(pred_disps_mono)
-        pred_disps_fuse = np.concatenate(pred_disps_fuse)
 
-    gt_path = os.path.join(
-        "/data/duqianqian/pythonwork/work3/test/MOVEDepth-mask-v9/movedepth/splits/eigen/gt_depths.npz")
+    gt_path = os.path.join("gt_depths.npz")
     gt_depths = np.load(gt_path, fix_imports=True, encoding='latin1', allow_pickle=True)["data"]
 
     errors_z = []
     errors_mono = []
-    errors_fuse = []
-    upbound_errors_fuse = []
 
     ratios1 = []
     ratios2 = []
-    ratios3 = []
 
     for i in tqdm(range(pred_disps_mono.shape[0])):
 
@@ -370,15 +355,14 @@ def evaluate(opt):
 
         pred_disp_z = np.squeeze(pred_disps_z[i])
         pred_disp_mono = np.squeeze(pred_disps_mono[i])
-        pred_disp_fuse = np.squeeze(pred_disps_fuse[i])
+
 
         pred_disp_mono = cv2.resize(pred_disp_mono, (gt_width, gt_height))
         pred_disp_z = cv2.resize(pred_disp_z, (gt_width, gt_height))
-        pred_disp_fuse = cv2.resize(pred_disp_fuse, (gt_width, gt_height))
+    
 
         pred_depth_z = 1 / pred_disp_z
         pred_depth_mono = 1 / pred_disp_mono
-        pred_depth_fuse = 1 / pred_disp_fuse
 
         if opt.eval_split == "eigen":
             mask = np.logical_and(gt_depth > MIN_DEPTH, gt_depth < MAX_DEPTH)
@@ -393,7 +377,7 @@ def evaluate(opt):
 
         pred_depth_z = pred_depth_z[mask]
         pred_depth_mono = pred_depth_mono[mask]
-        pred_depth_fuse = pred_depth_fuse[mask]
+
         gt_depth = gt_depth[mask]
 
         if not opt.disable_median_scaling:
@@ -405,30 +389,23 @@ def evaluate(opt):
             # print(i, "pred_depth_z", np.median(pred_depth_z))
             ratios2.append(ratio2)
             pred_depth_z *= ratio2
-            ratio3 = np.median(gt_depth) / np.median(pred_depth_fuse)
-            ratios3.append(ratio3)
-            pred_depth_fuse *= ratio3
+    
 
         pred_depth_z[pred_depth_z < MIN_DEPTH] = MIN_DEPTH
         pred_depth_z[pred_depth_z > MAX_DEPTH] = MAX_DEPTH
         pred_depth_mono[pred_depth_mono < MIN_DEPTH] = MIN_DEPTH
         pred_depth_mono[pred_depth_mono > MAX_DEPTH] = MAX_DEPTH
-        pred_depth_fuse[pred_depth_fuse < MIN_DEPTH] = MIN_DEPTH
-        pred_depth_fuse[pred_depth_fuse > MAX_DEPTH] = MAX_DEPTH
+      
 
         this_mvs_err_z = compute_errors(gt_depth, pred_depth_z)
         this_mono_err = compute_errors(gt_depth, pred_depth_mono)
-        this_fuse_err = compute_errors(gt_depth, pred_depth_fuse)
 
         errors_z.append(this_mvs_err_z)
         errors_mono.append(this_mono_err)
-        errors_fuse.append(this_fuse_err)
-        upbound_errors_fuse.append(compute_fuse_errors(gt_depth, pred_depth_mono, pred_depth_z))
 
     mean_errors_z = np.array(errors_z).mean(0)
     mean_errors_mono = np.array(errors_mono).mean(0)
-    mean_errors_fuse = np.array(errors_fuse).mean(0)
-    upbound_mean_errors_fuse = np.array(upbound_errors_fuse).mean(0)
+
 
     print('mono results:')
     if not opt.disable_median_scaling:
@@ -448,19 +425,7 @@ def evaluate(opt):
     print(("&{: 8.3f}  " * 7).format(*mean_errors_z.tolist()) + "\\\\")
     print("\n")
 
-    print('fuse results:')
-    if not opt.disable_median_scaling:
-        ratios = np.array(ratios3)
-        med = np.median(ratios)
-        print(" Scaling ratios | med: {:0.3f} | std: {:0.3f}".format(med, np.std(ratios / med)))
-    print(("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
-    print(("&{: 8.3f}  " * 7).format(*mean_errors_fuse.tolist()) + "\\\\")
-    print("\n")
 
-    print('upbound results:')
-    print(("{:>8} | " * 7).format("abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"))
-    print(("&{: 8.3f}  " * 7).format(*upbound_mean_errors_fuse.tolist()) + "\\\\")
-    print("\n")
 
 def seed_all(seed):
     if not seed:
