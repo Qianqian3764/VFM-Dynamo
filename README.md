@@ -10,6 +10,8 @@ pip install -r requirements.txt
 cd correlation_package
 python setup.py install
 ```
+## Model zoo
+You can download the pretrained model weights from the following [link](https://drive.google.com/drive/folders/1MVkAokl_dcJ-AGklU3nFSGP5sYUnoaU7?dmr=1&ec=wgc-drive-hero-goto).
 ## Ground Truth Data Preparation and Evaluation
 To prepare the ground truth depth maps, run:
 ```shell
