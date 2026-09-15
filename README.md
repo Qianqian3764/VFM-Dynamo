@@ -1,5 +1,5 @@
 # VFM-Dynamo
-This is the official PyTorch implementation for VFM-Dynamo.
+This is the official PyTorch implementation for VFM-Dynamo (IJCAI 2026).
 ## Requirements
 1. Install the dependencies with:
 ```shell
